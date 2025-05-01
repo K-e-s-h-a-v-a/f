@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AgriBot BLE Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-green-100 to-blue-100 min-h-screen text-gray-800">
+
+  <div class="max-w-4xl mx-auto p-6">
+    <h1 class="text-3xl font-bold mb-6 text-center">🌿 AgriBot BLE Dashboard</h1>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Soil Moisture -->
+      <div class="bg-white shadow-xl rounded-2xl p-6">
+        <h2 class="text-xl font-semibold mb-2">🌱 Soil Moisture</h2>
+        <p class="text-3xl font-bold" id="soilData">--</p>
+      </div>
+
+      <!-- Current Time -->
+      <div class="bg-white shadow-xl rounded-2xl p-6">
+        <h2 class="text-xl font-semibold mb-2">⏰ Current Time</h2>
+        <p class="text-2xl" id="timeData">--</p>
+      </div>
+
+      <!-- Weather -->
+      <div class="bg-white shadow-xl rounded-2xl p-6 col-span-1 md:col-span-2">
+        <h2 class="text-xl font-semibold mb-2">☁️ Weather</h2>
+        <p class="text-lg" id="weatherData">Detecting location...</p>
+      </div>
+    </div>
+
+    <div class="mt-8 text-center">
+      <button id="connectBtn" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-xl shadow-md">
+        🔌 Connect to Robot
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ——— Dashboard Elements ———
+    const soilEl = document.getElementById('soilData');
+    const timeEl = document.getElementById('timeData');
+    const weatherEl = document.getElementById('weatherData');
+    const connectBtn = document.getElementById('connectBtn');
+
+    // ——— BLE UART Service/Characteristic UUIDs ———
+    const UART_SERVICE     = 0xFFE0;
+    const UART_CHAR_RX_TX  = 0xFFE1; // notify from device
+
+    let uartChar;
+
+    // ——— Connect to MLT-BT05 over BLE ———
+    connectBtn.addEventListener('click', async () => {
+      try {
+        connectBtn.disabled = true;
+        connectBtn.innerText = '🔍 Scanning…';
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'MLT-BT05' }],
+          optionalServices: [UART_SERVICE]
+        });
+        connectBtn.innerText = '⚡ Connecting…';
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(UART_SERVICE);
+        uartChar = await service.getCharacteristic(UART_CHAR_RX_TX);
+
+        await uartChar.startNotifications();
+        uartChar.addEventListener('characteristicvaluechanged', handleUartData);
+
+        connectBtn.innerText = '✅ Connected';
+      } catch (err) {
+        alert('Connection failed: ' + err);
+        connectBtn.disabled = false;
+        connectBtn.innerText = '🔌 Connect to Robot';
+      }
+    });
+
+    // ——— Handle incoming BLE packets ———
+    const decoder = new TextDecoder();
+    let buffer = '';
+    function handleUartData(event) {
+      const chunk = decoder.decode(event.target.value);
+      buffer += chunk;
+      let eol;
+      while ((eol = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, eol).trim();
+        buffer = buffer.slice(eol + 1);
+        parseLine(line);
+      }
+    }
+
+    function parseLine(line) {
+      // Expecting: Soil:423
+      if (line.startsWith('Soil:')) {
+        soilEl.innerText = line.split(':')[1];
+      }
+    }
+
+    // ——— Live Time ———
+    function updateTime() {
+      timeEl.innerText = new Date().toLocaleTimeString();
+    }
+    setInterval(updateTime, 1000);
+    updateTime();
+
+    // ——— Weather (OpenWeatherMap) ———
+    async function getWeather() {
+      if (!navigator.geolocation) {
+        weatherEl.innerText = 'Geolocation not supported';
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(async pos => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const apiKey = '003538045cad01ad83d49688fa49afcd';  // ← replace with your key
+        const url = `https://api.openweathermap.org/data/2.5/weather`
+                  + `?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`;
+        try {
+          const res = await fetch(url);
+          const j  = await res.json();
+          weatherEl.innerText = `${j.weather[0].main}, ${j.main.temp}°C in ${j.name}`;
+        } catch {
+          weatherEl.innerText = 'Weather fetch failed';
+        }
+      }, () => {
+        weatherEl.innerText = 'Location permission denied';
+      });
+    }
+    getWeather();
+  </script>
+
+</body>
+</html>
