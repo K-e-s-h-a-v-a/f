@@ -31,7 +31,37 @@
       </div>
     </div>
 
-    <div class="mt-8 text-center">
+    <!-- Control Section -->
+    <div class="mt-10 bg-white rounded-2xl shadow-xl p-6 space-y-6">
+      <div class="flex justify-center space-x-4">
+        <button id="autoBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-semibold">🤖 Auto Mode</button>
+        <button id="manualBtn" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-xl font-semibold">🎮 Manual Mode</button>
+      </div>
+
+      <!-- Manual Controls -->
+      <div id="manualControls" class="hidden">
+        <div class="flex justify-center items-center space-x-4">
+          <button id="pumpOn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-semibold">💧 Pump ON</button>
+          <button id="pumpOff" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-semibold">🛑 Pump OFF</button>
+        </div>
+
+        <div class="mt-8 flex justify-center space-x-4">
+          <button id="forwardBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-semibold">↑ Forward</button>
+          <button id="backwardBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-semibold">↓ Backward</button>
+        </div>
+
+        <div class="mt-4 flex justify-center space-x-4">
+          <button id="leftBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-semibold">← Left</button>
+          <button id="rightBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-semibold">→ Right</button>
+        </div>
+
+        <div class="mt-8 flex justify-center space-x-4">
+          <button id="stopBtn" class="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-xl font-semibold">🚫 Stop</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-10 text-center">
       <button id="connectBtn" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-xl shadow-md">
         🔌 Connect to Robot
       </button>
@@ -39,19 +69,27 @@
   </div>
 
   <script>
-    // ——— Dashboard Elements ———
+    // Elements
     const soilEl = document.getElementById('soilData');
     const timeEl = document.getElementById('timeData');
     const weatherEl = document.getElementById('weatherData');
     const connectBtn = document.getElementById('connectBtn');
+    const autoBtn = document.getElementById('autoBtn');
+    const manualBtn = document.getElementById('manualBtn');
+    const manualControls = document.getElementById('manualControls');
+    const pumpOnBtn = document.getElementById('pumpOn');
+    const pumpOffBtn = document.getElementById('pumpOff');
+    const stopBtn = document.getElementById('stopBtn');
+    const forwardBtn = document.getElementById('forwardBtn');
+    const backwardBtn = document.getElementById('backwardBtn');
+    const leftBtn = document.getElementById('leftBtn');
+    const rightBtn = document.getElementById('rightBtn');
 
-    // ——— BLE UART Service/Characteristic UUIDs ———
-    const UART_SERVICE     = 0xFFE0;
-    const UART_CHAR_RX_TX  = 0xFFE1; // notify from device
-
+    // BLE
+    const UART_SERVICE = 0xFFE0;
+    const UART_CHAR_RX_TX = 0xFFE1;
     let uartChar;
 
-    // ——— Connect to MLT-BT05 over BLE ———
     connectBtn.addEventListener('click', async () => {
       try {
         connectBtn.disabled = true;
@@ -67,7 +105,6 @@
 
         await uartChar.startNotifications();
         uartChar.addEventListener('characteristicvaluechanged', handleUartData);
-
         connectBtn.innerText = '✅ Connected';
       } catch (err) {
         alert('Connection failed: ' + err);
@@ -76,7 +113,6 @@
       }
     });
 
-    // ——— Handle incoming BLE packets ———
     const decoder = new TextDecoder();
     let buffer = '';
     function handleUartData(event) {
@@ -91,20 +127,57 @@
     }
 
     function parseLine(line) {
-      // Expecting: Soil:423
       if (line.startsWith('Soil:')) {
         soilEl.innerText = line.split(':')[1];
       }
     }
 
-    // ——— Live Time ———
+    function sendCmd(c) {
+      if (!uartChar) return;
+      const encoder = new TextEncoder();
+      uartChar.writeValue(encoder.encode(c));
+    }
+
+    // Mode Toggle
+    autoBtn.addEventListener('click', () => {
+      autoBtn.classList.replace('bg-gray-200', 'bg-blue-600');
+      autoBtn.classList.replace('text-black', 'text-white');
+      manualBtn.classList.replace('bg-blue-600', 'bg-gray-200');
+      manualBtn.classList.replace('text-white', 'text-black');
+      manualControls.classList.add('hidden');
+      sendCmd('A'); // Auto mode
+    });
+
+    manualBtn.addEventListener('click', () => {
+      manualBtn.classList.replace('bg-gray-200', 'bg-blue-600');
+      manualBtn.classList.replace('text-black', 'text-white');
+      autoBtn.classList.replace('bg-blue-600', 'bg-gray-200');
+      autoBtn.classList.replace('text-white', 'text-black');
+      manualControls.classList.remove('hidden');
+      sendCmd('M'); // Manual mode
+    });
+
+    // Pump
+    pumpOnBtn.addEventListener('click', () => sendCmd('W'));
+    pumpOffBtn.addEventListener('click', () => sendCmd('w'));
+
+    // Movement Controls
+    forwardBtn.addEventListener('click', () => sendCmd('F')); // Forward
+    backwardBtn.addEventListener('click', () => sendCmd('B')); // Backward
+    leftBtn.addEventListener('click', () => sendCmd('L')); // Left
+    rightBtn.addEventListener('click', () => sendCmd('R')); // Right
+
+    // Stop
+    stopBtn.addEventListener('click', () => sendCmd('S')); // Stop robot movement
+
+    // Time
     function updateTime() {
       timeEl.innerText = new Date().toLocaleTimeString();
     }
     setInterval(updateTime, 1000);
     updateTime();
 
-    // ——— Weather (OpenWeatherMap) ———
+    // Weather
     async function getWeather() {
       if (!navigator.geolocation) {
         weatherEl.innerText = 'Geolocation not supported';
@@ -113,12 +186,11 @@
       navigator.geolocation.getCurrentPosition(async pos => {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
-        const apiKey = '003538045cad01ad83d49688fa49afcd';  // ← replace with your key
-        const url = `https://api.openweathermap.org/data/2.5/weather`
-                  + `?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`;
+        const apiKey = '003538045cad01ad83d49688fa49afcd';
+        const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`;
         try {
           const res = await fetch(url);
-          const j  = await res.json();
+          const j = await res.json();
           weatherEl.innerText = `${j.weather[0].main}, ${j.main.temp}°C in ${j.name}`;
         } catch {
           weatherEl.innerText = 'Weather fetch failed';
@@ -129,6 +201,5 @@
     }
     getWeather();
   </script>
-
 </body>
 </html>
